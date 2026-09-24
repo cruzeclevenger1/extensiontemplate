@@ -555,6 +555,14 @@ function sectionEl(id, onDash) {
   return el;
 }
 
+window.addEventListener("message", e => {
+  if (e.source !== window || e.data?.source !== "aio-ext") return;
+  for (const [path, value] of Object.entries(e.data.fields ?? {})) {
+    const [section, key] = path.split(".");
+    setField(section, key, value);
+  }
+});
+
 go(active);
 </script>
 </body>
