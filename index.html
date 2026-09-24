@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>All In One Viewing Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #181b21;
+    --surface: #20242c;
+    --surface-2: #272c36;
+    --border: #323846;
+    --grid-line: #262b35;
+    --text: #d9dde4;
+    --muted: #8a92a3;
+    --accent: #7fa7cc;
+    --danger: #d98080;
+    --radius: 8px;
+    --row: 60px;
+    --cols: 12;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0; min-height: 100%;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.5 "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  button, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  header {
+    display: flex; align-items: center; gap: 24px;
+    padding: 0 20px; border-bottom: 1px solid var(--border);
+    background: var(--surface); overflow-x: auto;
+  }
+  header h1 { font-size: 15px; font-weight: 600; margin: 0; white-space: nowrap; }
+  nav { display: flex; gap: 4px; }
+  .tab {
+    position: relative; background: none; border: 0; padding: 14px 12px;
+    color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap;
+  }
+  .tab[draggable="true"] { cursor: grab; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab.pinned::after {
+    content: ""; position: absolute; top: 12px; right: 4px;
+    width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+  }
+
+  main { padding: 24px 20px; max-width: 1600px; margin: 0 auto; }
+  h2 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+  .search { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 16px; }
+  .search input {
+    flex: 1 1 180px; min-width: 0; padding: 8px 10px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    font: inherit; color: inherit;
+  }
+  .search input::placeholder { color: var(--muted); }
+  .search input:focus { border-color: var(--accent); outline: none; }
+  .search button {
+    padding: 8px 18px; border: 0; border-radius: var(--radius);
+    background: var(--accent); color: var(--bg); font-weight: 600;
+  }
+
+  .board {
+    position: relative; display: grid;
+    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+    grid-auto-rows: var(--row);
+    border: 1px dashed var(--border); border-radius: var(--radius);
+    user-select: none;
+  }
+  .board.editing {
+    border-color: var(--accent);
+    background-image:
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+    background-size: calc(100% / var(--cols)) var(--row);
+  }
+  .empty {
+    grid-column: 1 / -1; grid-row: 1 / span 3;
+    display: grid; place-items: center; color: var(--muted); pointer-events: none;
+  }
+
+  .section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); display: flex; flex-direction: column;
+    min-height: 0; overflow: hidden;
+  }
+  .board .section { margin: 6px; position: relative; }
+  .section.moving { opacity: .35; }
+  .section-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; border-bottom: 1px solid var(--border); font-weight: 600;
+  }
+  .board .section-head { cursor: grab; touch-action: none; }
+  .size { color: var(--muted); font-size: 12px; font-weight: 500; margin-right: 6px; }
+  .board textarea { user-select: text; }
+  .icon { background: none; border: 0; color: var(--muted); padding: 2px 6px; border-radius: 4px; }
+  .icon:hover { color: var(--danger); }
+  .section textarea {
+    flex: 1; min-height: 0; resize: none;
+    background: none; border: 0; padding: 12px; outline: none;
+  }
+  .full { height: 70vh; }
+  .fields { flex: 1; overflow: auto; list-style: none; margin: 0; padding: 8px 12px; }
+  .full .fields { columns: 2 320px; column-gap: 32px; }
+  .fields li { break-inside: avoid; padding: 4px 0; border-bottom: 1px solid var(--grid-line); }
+  .fields .k { color: var(--muted); }
+  .fields .v { overflow-wrap: anywhere; }
+  .fields .none { color: var(--muted); border: 0; }
+  .board .fields { user-select: text; }
+
+  .drawer-toggle {
+    position: fixed; right: 0; top: 50%; transform: translateY(-50%); z-index: 20;
+    background: var(--surface-2); border: 1px solid var(--border); border-right: 0;
+    border-radius: 8px 0 0 8px; padding: 16px 6px; color: var(--muted); transition: right .2s;
+  }
+  .drawer-toggle:hover { color: var(--text); }
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 19;
+    width: 280px; max-width: 85vw; overflow-y: auto;
+    padding: calc(20px + env(safe-area-inset-top, 0px)) 20px calc(20px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface); border-left: 1px solid var(--border);
+    transform: translateX(100%); transition: transform .2s;
+  }
+  body.drawer-open .drawer { transform: none; }
+  body.drawer-open .drawer-toggle { right: min(280px, 85vw); }
+  .drawer h3 { font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+  .drawer label { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; }
+  .drawer input { accent-color: var(--accent); }
+  .drawer label { border-radius: 4px; }
+  .drawer label.dragging { opacity: .4; }
+  .drawer label.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+  .drawer label.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+  .grip { color: var(--muted); cursor: grab; padding: 0 2px; letter-spacing: -2px; }
+  @media (prefers-reduced-motion: reduce) { .drawer, .drawer-toggle { transition: none; } }
+  .resize {
+    position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;
+    cursor: nwse-resize; touch-action: none;
+    background: linear-gradient(135deg, transparent 50%, var(--muted) 50%, var(--muted) 60%, transparent 60%, transparent 72%, var(--muted) 72%, var(--muted) 82%, transparent 82%);
+  }
+
+  .ghost {
+    margin: 6px; border: 2px dashed var(--accent); border-radius: var(--radius);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    display: none; align-items: flex-start; justify-content: flex-end;
+    pointer-events: none; z-index: 5;
+  }
+  .ghost.show { display: flex; }
+  .ghost span {
+    margin: 6px; padding: 2px 8px; border-radius: 4px; font-size: 12px;
+    background: var(--accent); color: var(--bg); font-weight: 600;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>All In One</h1>
+  <nav id="tabs"></nav>
+</header>
+<main id="view"></main>
+<button class="drawer-toggle" id="drawerToggle" aria-label="Customize fields" aria-expanded="false">‹</button>
+<aside class="drawer" id="drawer" aria-label="Customize fields"></aside>
+
+<script>
+const SECTIONS = [
+  { id: "nxt", name: "ServAssure NXT", fields: [
+    { key: "regStatus", label: "Status" },
+    { key: "inHomeScore", label: "In-home" },
+    { key: "cmUptime", label: "Uptime" },
+    { key: "cmLatency", label: "Latency" },
+    { key: "maxTrafficRateDs", label: "CM DS max" },
+    { key: "maxTrafficRateUs", label: "CM US max" },
+    { key: "flapTotalCnt", label: "Total flaps" },
+    { key: "name", label: "Customer name" },
+    { key: "address1", label: "Address line 1" },
+    { key: "address2", label: "Address line 2" },
+    { key: "locality", label: "City" },
+    { key: "customerId", label: "Account #" },
+    { key: "cpeMac", label: "Connected MACs" },
+    { key: "cpeIpAddr", label: "Public IP address" },
+    { key: "cmV4Host", label: "IPv4 access" },
+    { key: "cmtsName", label: "Node name" },
+    { key: "fiberNodeId", label: "Fiber node name" },
+    { key: "cmSysDescr", label: "CM system description" },
+    { key: "cmConfigFile", label: "Provisioning" },
+  ]},
+  { id: "aoe", name: "AOE" },
+  { id: "calix", name: "Calix" },
+  { id: "nokia", name: "Nokia" },
+];
+const COLS = 12, ROW = 60, MIN_W = 2, MIN_H = 3, NEW_W = 3, NEW_H = 5;
+const KEY = "aio-state-v3";
+
+let state = load();
+let active = "dashboard";
+let tabDragId = null;
+const query = { account: "", mac: "", street: "" };
+
+// Hook for the extension: listen with window.addEventListener("aio-search", e => e.detail)
+function search() {
+  window.dispatchEvent(new CustomEvent("aio-search", { detail: { ...query } }));
+}
+const values = {};
+
+window.setField = (section, key, value) => {
+  (values[section] ??= {})[key] = value;
+  document.querySelectorAll(`[data-field="${section}.${key}"]`).forEach(el => el.textContent = value ?? "--");
+};
+
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s && s.text && Array.isArray(s.dash)) { s.hidden ??= {}; s.order ??= {}; return s; }
+  } catch {}
+  return { text: {}, dash: [], hidden: {}, order: {} };
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+}
+const sectionOf = id => SECTIONS.find(s => s.id === id);
+const nameOf = id => sectionOf(id)?.name ?? id;
+const itemOf = id => state.dash.find(d => d.id === id);
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+// Keeps `fixed` where it is and pushes anything it overlaps downward
+function settle(fixed) {
+  const settled = [fixed];
+  state.dash.filter(d => d !== fixed).sort((a, b) => a.y - b.y).forEach(d => {
+    while (settled.some(s => overlaps(s, d))) d.y++;
+    settled.push(d);
+  });
+}
+
+function renderTabs() {
+  const nav = document.getElementById("tabs");
+  nav.innerHTML = "";
+  [{ id: "dashboard", name: "Dashboard" }, ...SECTIONS].forEach(t => {
+    const b = document.createElement("button");
+    b.className = "tab" + (t.id === active ? " active" : "");
+    b.textContent = t.name;
+    b.onclick = () => go(t.id);
+    if (t.id !== "dashboard") {
+      if (itemOf(t.id)) { b.classList.add("pinned"); b.title = "On dashboard"; nav.appendChild(b); return; }
+      b.draggable = true;
+      b.addEventListener("dragstart", e => { tabDragId = t.id; e.dataTransfer.setData("text/plain", t.id); });
+      b.addEventListener("dragend", () => { tabDragId = null; });
+    }
+    nav.appendChild(b);
+  });
+}
+
+function orderedFields(sec) {
+  const order = state.order[sec.id] ?? [];
+  const rank = (f, i) => { const r = order.indexOf(f.key); return r < 0 ? 1e6 + i : r; };
+  return sec.fields.map((f, i) => [rank(f, i), f]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+}
+
+let fieldDragKey = null;
+
+function setDrawer(open) {
+  const btn = document.getElementById("drawerToggle");
+  document.body.classList.toggle("drawer-open", open);
+  btn.textContent = open ? "›" : "‹";
+  btn.setAttribute("aria-expanded", open);
+}
+
+function renderDrawer() {
+  const drawer = document.getElementById("drawer");
+  const btn = document.getElementById("drawerToggle");
+  const onDash = active === "dashboard";
+  btn.hidden = onDash;
+  drawer.hidden = onDash;
+  if (onDash) { setDrawer(false); return; }
+
+  const sec = sectionOf(active);
+  drawer.innerHTML = `<h3>${sec.name} fields</h3>`;
+  if (!sec.fields) {
+    drawer.insertAdjacentHTML("beforeend", `<p class="hint">This section has no fields yet.</p>`);
+    return;
+  }
+  const hidden = state.hidden[sec.id] ??= [];
+  const clearMarks = () => drawer.querySelectorAll("label").forEach(l => l.classList.remove("drop-before", "drop-after"));
+  orderedFields(sec).forEach(f => {
+      const row = document.createElement("label");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = !hidden.includes(f.key);
+      box.onchange = () => {
+        state.hidden[sec.id] = box.checked ? hidden.filter(k => k !== f.key) : [...hidden, f.key];
+      save(); render();
+    };
+    const grip = document.createElement("span");
+    grip.className = "grip";
+    grip.textContent = "⋮⋮";
+    row.append(grip, box, f.label);
+    row.draggable = true;
+
+    row.addEventListener("dragstart", e => {
+      fieldDragKey = f.key;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", f.key);
+      row.classList.add("dragging");
+    });
+    row.addEventListener("dragend", () => { fieldDragKey = null; row.classList.remove("dragging"); clearMarks(); });
+    row.addEventListener("dragover", e => {
+      if (!fieldDragKey || fieldDragKey === f.key) return;
+      e.preventDefault();
+      const r = row.getBoundingClientRect();
+      const before = e.clientY < r.top + r.height / 2;
+      clearMarks();
+      row.classList.add(before ? "drop-before" : "drop-after");
+    });
+    row.addEventListener("drop", e => {
+      e.preventDefault();
+      if (!fieldDragKey || fieldDragKey === f.key) return;
+      const after = row.classList.contains("drop-after");
+      const keys = orderedFields(sec).map(x => x.key).filter(k => k !== fieldDragKey);
+      keys.splice(keys.indexOf(f.key) + (after ? 1 : 0), 0, fieldDragKey);
+      state.order[sec.id] = keys;
+      fieldDragKey = null;
+      save(); render();
+    });
+    drawer.appendChild(row);
+  });
+}
+
+document.getElementById("drawerToggle").onclick = () => {
+  setDrawer(!document.body.classList.contains("drawer-open"));
+};
+
+function fieldList(sec) {
+  const list = document.createElement("ul");
+  list.className = "fields";
+  const hidden = state.hidden[sec.id] ?? [];
+  const shown = orderedFields(sec).filter(f => !hidden.includes(f.key));
+  if (!shown.length) list.innerHTML = `<li class="none">No fields shown. Turn some on in the side panel.</li>`;
+  shown.forEach(f => {
+    const li = document.createElement("li");
+    const k = document.createElement("span");
+    const v = document.createElement("span");
+    k.className = "k"; k.textContent = f.label + ": ";
+    v.className = "v"; v.dataset.field = `${sec.id}.${f.key}`;
+    v.textContent = values[sec.id]?.[f.key] ?? "--";
+    li.append(k, v);
+    list.appendChild(li);
+  });
+  return list;
+}
+
+function go(id) {
+  active = id;
+  render();
+}
+
+function render() {
+  renderTabs();
+  renderDrawer();
+  const view = document.getElementById("view");
+  view.innerHTML = "";
+  active === "dashboard" ? renderDashboard(view) : renderSection(view, active);
+}
+
+function renderSection(view, id) {
+  view.innerHTML = `<h2>${nameOf(id)}</h2><p class="hint">&nbsp;</p>`;
+  const el = sectionEl(id, false);
+  el.classList.add("full");
+  view.appendChild(el);
+}
+
+function renderDashboard(view) {
+  view.innerHTML = `
+    <h2>Dashboard</h2>
+    <div class="search">
+      <input data-q="account" placeholder="Account #" aria-label="Account #">
+      <input data-q="mac" placeholder="MAC address" aria-label="MAC address">
+      <input data-q="street" placeholder="Street address" aria-label="Street address">
+      <button type="button">Search</button>
+    </div>
+    <div class="board"></div>`;
+  view.querySelectorAll("[data-q]").forEach(input => {
+    input.value = query[input.dataset.q];
+    input.oninput = () => { query[input.dataset.q] = input.value.trim(); };
+    input.onkeydown = e => { if (e.key === "Enter") search(); };
+  });
+  view.querySelector(".search button").onclick = search;
+  const board = view.querySelector(".board");
+  const ghost = document.createElement("div");
+  ghost.className = "ghost";
+  ghost.innerHTML = "<span></span>";
+
+  if (!state.dash.length) board.innerHTML = `<div class="empty">Drag a tab here to add it.</div>`;
+  state.dash.forEach(d => {
+    const el = sectionEl(d.id, true);
+    position(el, d);
+    board.appendChild(el);
+    bindMove(el, d, board, ghost);
+    bindResize(el, d, board);
+  });
+  board.appendChild(ghost);
+  fitHeight(board);
+
+  board.addEventListener("dragover", e => {
+    if (!tabDragId) return;
+    e.preventDefault();
+    const size = itemOf(tabDragId) ?? { w: NEW_W, h: NEW_H };
+    const { col, row } = cellAt(board, e.clientX, e.clientY);
+    showGhost(board, ghost, { x: clamp(col, 0, COLS - size.w), y: Math.max(0, row), w: size.w, h: size.h });
+  });
+  board.addEventListener("dragleave", e => {
+    if (!board.contains(e.relatedTarget)) hideGhost(board, ghost);
+  });
+  board.addEventListener("drop", e => {
+    e.preventDefault();
+    if (!tabDragId || !ghost.dataset.pos) return;
+    const pos = JSON.parse(ghost.dataset.pos);
+    let item = itemOf(tabDragId);
+    if (item) Object.assign(item, pos);
+    else { item = { id: tabDragId, ...pos }; state.dash.push(item); }
+    tabDragId = null;
+    settle(item); save(); render();
+  });
+}
+
+function cellAt(board, x, y) {
+  const r = board.getBoundingClientRect();
+  return {
+    col: Math.floor((x - r.left) / (r.width / COLS)),
+    row: Math.floor((y - r.top) / ROW),
+  };
+}
+
+function position(el, p) {
+  el.style.gridColumn = `${p.x + 1} / span ${p.w}`;
+  el.style.gridRow = `${p.y + 1} / span ${p.h}`;
+}
+
+function fitHeight(board, extra) {
+  const bottom = Math.max(0, ...state.dash.map(d => d.y + d.h), extra ?? 0);
+  board.style.minHeight = (bottom + 4) * ROW + "px";
+}
+
+function showGhost(board, ghost, pos) {
+  board.classList.add("editing");
+  ghost.classList.add("show");
+  ghost.dataset.pos = JSON.stringify(pos);
+  ghost.firstChild.textContent = `col ${pos.x + 1}, row ${pos.y + 1} · ${pos.w}×${pos.h}`;
+  position(ghost, pos);
+  fitHeight(board, pos.y + pos.h);
+}
+
+function hideGhost(board, ghost) {
+  board.classList.remove("editing");
+  ghost.classList.remove("show");
+  delete ghost.dataset.pos;
+}
+
+function bindMove(el, item, board, ghost) {
+  const head = el.querySelector(".section-head");
+  head.addEventListener("pointerdown", e => {
+    if (e.target.closest("button") || e.button !== 0) return;
+    const start = cellAt(board, e.clientX, e.clientY);
+    const off = { c: start.col - item.x, r: start.row - item.y };
+    head.setPointerCapture(e.pointerId);
+    el.classList.add("moving");
+
+    const move = ev => {
+      const { col, row } = cellAt(board, ev.clientX, ev.clientY);
+      showGhost(board, ghost, {
+        x: clamp(col - off.c, 0, COLS - item.w),
+        y: Math.max(0, row - off.r),
+        w: item.w, h: item.h,
+      });
+    };
+    const up = () => {
+      head.removeEventListener("pointermove", move);
+      head.removeEventListener("pointerup", up);
+      head.removeEventListener("pointercancel", up);
+      el.classList.remove("moving");
+      if (ghost.dataset.pos) {
+        Object.assign(item, JSON.parse(ghost.dataset.pos));
+        settle(item); save();
+      }
+      render();
+    };
+    head.addEventListener("pointermove", move);
+    head.addEventListener("pointerup", up);
+    head.addEventListener("pointercancel", up);
+  });
+}
+
+function bindResize(el, item, board) {
+  const handle = el.querySelector(".resize");
+  handle.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    board.classList.add("editing");
+
+    const move = ev => {
+      const { col, row } = cellAt(board, ev.clientX, ev.clientY);
+      item.w = clamp(col - item.x + 1, MIN_W, COLS - item.x);
+      item.h = Math.max(MIN_H, row - item.y + 1);
+      position(el, item);
+      el.querySelector(".size").textContent = `${item.w}×${item.h}`;
+      fitHeight(board);
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      settle(item); save(); render();
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  });
+}
+
+function sectionEl(id, onDash) {
+  const el = document.createElement("div");
+  el.className = "section";
+  el.dataset.id = id;
+  el.innerHTML = `
+    <div class="section-head">
+      <span>${nameOf(id)}</span>
+      ${onDash ? `<span><span class="size"></span><button class="icon" title="Remove from dashboard">×</button></span>` : ""}
+    </div>
+    <textarea placeholder="Type here…"></textarea>
+    ${onDash ? `<div class="resize" title="Resize"></div>` : ""}`;
+
+  const text = el.querySelector("textarea");
+  const sec = sectionOf(id);
+  if (sec?.fields) text.replaceWith(fieldList(sec));
+  else {
+    text.value = state.text[id] ?? "";
+    text.oninput = () => { state.text[id] = text.value; save(); };
+  }
+
+  if (onDash) {
+    el.querySelector(".icon").onclick = () => {
+      state.dash = state.dash.filter(d => d.id !== id);
+      save(); render();
+    };
+  }
+  return el;
+}
+
+go(active);
+</script>
+</body>
+</html>
